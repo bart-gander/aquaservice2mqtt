@@ -1,0 +1,22 @@
+# Relative paths are resolved relative to this configuration file.
+# aquaservice-api is installed automatically; no client script path is needed.
+credentialspath = "credentials.json"
+
+# Seconds; minimum 60. Default when omitted: 21600 (6 hours).
+pollinterval = 21600
+
+# Choose a stable, non-sensitive identifier. It appears in MQTT topics and HA IDs.
+instanceid = "aquaservice"
+topicprefix = "aquaservice2mqtt"
+discoveryprefix = "homeassistant"
+
+brokerhost = "127.0.0.1"
+brokerport = 1883
+
+# TLS is optional. Set tls = true and optionally a CA file for a TLS broker.
+tls = false
+# ca = "ca.pem"
+
+# Optional MQTT authentication. Do not put a password in this file or on the CLI.
+# username = "mqtt-user"
+# password_env = "AQUASERVICE2MQTT_PASSWORD"

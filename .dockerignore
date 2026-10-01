@@ -1,0 +1,12 @@
+# Allowlist: never send credentials, config, tests, .git, or caches to the builder.
+**
+!Containerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!src/**
+# Even source directories must not contribute interpreter caches.
+**/__pycache__/
+**/*.pyc

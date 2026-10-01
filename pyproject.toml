@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aquaservice2mqtt"
+version = "0.1.0"
+description = "Read-only Aquaservice next-delivery MQTT bridge"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "paho-mqtt>=2,<3",
+    "aquaservice-api @ git+https://github.com/bart-gander/aquaservice-api.git@v0.1.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.scripts]
+aquaservice2mqtt = "aquaservice2mqtt.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[dependency-groups]
+test = ["pytest>=8", "amqtt>=0.11"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aquaservice2mqtt"]

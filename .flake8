@@ -1,0 +1,5 @@
+[flake8]
+# Keep other checks enabled; do not enforce a maximum line length.
+extend-ignore = E501
+# Check our source, not installed dependencies or generated artifacts.
+extend-exclude = .venv,build,dist

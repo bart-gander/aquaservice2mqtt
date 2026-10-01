@@ -1,0 +1,15 @@
+# Private local settings and credentials
+credentials.json
+config.toml
+.env
+
+# Python/build/test cache
+.venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.egg-info/
+*.py[cod]
