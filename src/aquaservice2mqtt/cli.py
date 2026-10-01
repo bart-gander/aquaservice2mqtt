@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import signal
 import sys
 import threading
@@ -74,6 +75,11 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(_planned(settings, value), sort_keys=True))
             return 0
         stop = threading.Event()
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+            stream=sys.stderr,
+        )
 
         def request_stop(signum, frame):  # type: ignore[no-untyped-def]
             stop.set()

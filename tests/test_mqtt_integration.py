@@ -1,3 +1,4 @@
+import logging
 import socket
 import subprocess
 import sys
@@ -75,7 +76,8 @@ def wait_for(predicate, bridge: MqttBridge, timeout: float = 10) -> None:
     )
 
 
-def test_loopback_broker_discovery_state_birth_reconnect_and_error(tmp_path):
+def test_loopback_broker_discovery_state_birth_reconnect_and_error(tmp_path, caplog):
+    caplog.set_level(logging.INFO, logger="aquaservice2mqtt")
     port, broker = free_port(), None
     subscriber = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
@@ -180,3 +182,11 @@ def test_loopback_broker_discovery_state_birth_reconnect_and_error(tmp_path):
         subscriber.disconnect()
         if broker:
             stop_broker(broker)
+    assert "MQTT connected." in caplog.text
+    assert "Aquaservice poll succeeded;" in caplog.text
+    assert "MQTT snapshot acknowledged." in caplog.text
+    assert "Home Assistant online; scheduling cached snapshot replay." in caplog.text
+    assert "MQTT disconnected; waiting for automatic reconnect." in caplog.text
+    assert "Aquaservice MQTT bridge stopped." in caplog.text
+    assert "2027-04-02" not in caplog.text
+    assert "synthetic upstream failure" not in caplog.text

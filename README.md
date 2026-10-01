@@ -49,6 +49,31 @@ uv run aquaservice2mqtt --config config.toml run
 
 `SIGINT`/`SIGTERM` publishes retained `offline` when the broker connection is available, then cleanly stops the Paho loop. API/validation failures are reported on stderr without upstream bodies, URLs, or credentials; the bridge publishes retained `offline` and backs off failure polls to at most once per 300 seconds (or the configured interval when shorter). MQTT publish failures are reported separately and retried with a five-second backoff, without forcing another API request or waiting for a new connection event. Actual transport disconnections use Paho's automatic reconnect. The pending MQTT queue is bounded. Missing, unreadable, or invalid TLS CA files produce a sanitized configuration error and exit code 2.
 
+### Runtime logs
+
+`run` emits timestamped INFO logs to stderr by default: startup and polling
+interval, MQTT connection/reconnection, poll start/success, acknowledged MQTT
+snapshots, Home Assistant birth replay, and shutdown. Connection-attempt failures
+(including DNS/TCP/TLS failures), broker rejection, API failures, and publication
+failures produce sanitized warnings with retry information. A snapshot is logged
+as acknowledged only after its QoS-1 publishes complete; this confirms broker
+receipt, not Home Assistant consumption.
+
+Logs omit credentials, broker/account identifiers, credential paths, delivery
+dates, response bodies, and raw exceptions. `check` continues to print its planned
+MQTT JSON to stdout without INFO logs. There is no per-tick heartbeat; after a
+successful poll the bridge can be quiet until the next scheduled poll (six hours
+by default), MQTT event, or shutdown.
+
+For Kubernetes, read the container stream directly, for example:
+
+```sh
+kubectl -n <namespace> logs -f deployment/aquaservice2mqtt --timestamps
+```
+
+This requires an image built with the logging fix; restarting an older pinned
+image does not add these logs.
+
 ## Container
 
 Build the production image (Git and uv are confined to the builder stage):

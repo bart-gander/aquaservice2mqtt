@@ -32,7 +32,9 @@ pollinterval = 60
     )
     assert main(["--config", str(config), "check"]) == 0
     load.assert_called_once_with(tmp_path / "private-credentials.json")
-    result = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    assert output.err == ""
+    result = json.loads(output.out)
     assert result["state"] == {
         "topic": "house/bridges/safe-instance/next_delivery/state",
         "payload": "2027-04-02",

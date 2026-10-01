@@ -83,6 +83,11 @@ class MqttBridge:
         if reason_code == 0:
             client.subscribe(f"{self.settings.discovery_prefix}/status", qos=1)
             self.events.put("connected")
+        else:
+            self.events.put("connection_rejected")
+
+    def _on_connect_fail(self, client, userdata):  # type: ignore[no-untyped-def]
+        self.events.put("connection_failed")
 
     def _on_disconnect(
         self, client, userdata, disconnect_flags, reason_code, properties
@@ -99,6 +104,10 @@ class MqttBridge:
     def start(self) -> None:
         if self.running:
             return
+        logger.info(
+            "Starting Aquaservice MQTT bridge; poll interval=%s seconds.",
+            self.settings.interval,
+        )
         client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"aquaservice2mqtt-{self.settings.instance_id}",
@@ -126,6 +135,10 @@ class MqttBridge:
             self._on_message,
         )
         self.client, self.running = client, True
+        client.on_connect_fail = self._on_connect_fail
+        logger.info(
+            "MQTT connection requested; automatic reconnect enabled (backoff up to 5 seconds)."
+        )
         client.connect_async(
             self.settings.broker_host, self.settings.broker_port, keepalive=60
         )
@@ -168,6 +181,7 @@ class MqttBridge:
             self.clear_retained_state = False
         self._publish_discovery()
         self._publish_cached_state(now)
+        logger.info("MQTT snapshot acknowledged.")
 
     def _drain_events(self) -> None:
         while True:
@@ -177,13 +191,26 @@ class MqttBridge:
                 return
             if event == "connected":
                 self.connected = True
+                logger.info("MQTT connected.")
                 self.clear_retained_state = True
                 self.needs_publish = True
                 self.next_publish = 0.0
             elif event == "disconnected":
                 self.connected = False
                 logger.warning("MQTT disconnected; waiting for automatic reconnect.")
+            elif event == "connection_failed":
+                self.connected = False
+                logger.warning(
+                    "MQTT connection attempt failed; automatic reconnect enabled (backoff up to 5 seconds)."
+                )
+            elif event == "connection_rejected":
+                self.connected = False
+                logger.warning(
+                    "MQTT connection rejected by broker; check authentication and broker policy. "
+                    "Automatic reconnect enabled (backoff up to 5 seconds)."
+                )
             elif event == "birth" and self.connected:
+                logger.info("Home Assistant online; scheduling cached snapshot replay.")
                 # A birth event must not bypass an existing publish retry backoff.
                 if not self.needs_publish:
                     self.next_publish = 0.0
@@ -196,11 +223,16 @@ class MqttBridge:
         if not self.connected:
             return
         if now >= self.next_poll:
+            logger.info("Aquaservice poll started.")
             try:
                 value = self.fetcher()
                 self.cached_state, self.cached_at = value, now
                 self.cache_is_currently_valid = True
                 self.next_poll = now + self.settings.interval
+                logger.info(
+                    "Aquaservice poll succeeded; next poll in %s seconds.",
+                    self.settings.interval,
+                )
             except Exception:
                 self.cache_is_currently_valid = False
                 retry = min(self.settings.interval, 300)
@@ -234,6 +266,7 @@ class MqttBridge:
     def stop(self) -> None:
         if not self.running:
             return
+        logger.info("Stopping Aquaservice MQTT bridge.")
         try:
             if self.connected:
                 self._publish(self.topics.availability, "offline", retain=True)
@@ -243,3 +276,4 @@ class MqttBridge:
             self.client.disconnect()
             self.client.loop_stop()
         self.connected = self.running = False
+        logger.info("Aquaservice MQTT bridge stopped.")
