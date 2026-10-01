@@ -76,7 +76,8 @@ def _relative(base: Path, value: object, name: str) -> Path | None:
     if not isinstance(value, str):
         raise ConfigError(f"{name} must be a string path.")
     path = Path(value).expanduser()
-    return path if path.is_absolute() else (base / path).resolve()
+    # Keep projected Secret/ConfigMap symlinks intact across atomic rotations.
+    return path if path.is_absolute() else base / path
 
 
 def _topic_part(value: object, name: str, *, allow_slash: bool = False) -> str:
@@ -103,7 +104,7 @@ def load_config(path: Path | None = None) -> Settings:
         raise ConfigError("AQUASERVICE2MQTT_CONFIG must be a non-empty path.")
     explicit = configured is not None
     path = Path(configured) if configured is not None else Path("config.toml")
-    path = path.expanduser().resolve()
+    path = path.expanduser().absolute()
     try:
         with path.open("rb") as handle:
             data = tomllib.load(handle)

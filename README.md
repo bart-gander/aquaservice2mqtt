@@ -5,7 +5,7 @@ A small, read-only MQTT bridge for **only** Aquaservice's next delivery date. It
 ## Install
 
 Python 3.11+ and Git are required. `uv sync` automatically downloads and installs
-`aquaservice-api` from its published **`v0.1.0`** GitHub tag. No separate checkout,
+`aquaservice-api` from its published **`v0.1.1`** GitHub tag. No separate checkout,
 client-script path, or subprocess API invocation is needed.
 
 ```sh
@@ -18,13 +18,14 @@ chmod 600 credentials.json
 
 The adapter uses normal `import aquaservice` and calls its public
 `load_credentials(Path)` and `get_next_delivery_date(credentials)` functions.
-The existing integration enforces a private regular credentials file and validates
-the API's canonical date. `pyproject.toml` names the tag; `uv.lock` records its
+The existing integration requires a regular credentials file without group/world
+write access, supports projected Secret symlinks, and validates the API's canonical
+date. `pyproject.toml` names the tag; `uv.lock` records its
 resolved commit for reproducible installs. For an existing installation, run
 `uv sync` and remove the old `clientscript` / `client_script` setting from your
 configuration; those obsolete settings now produce a clear migration error.
 
-Populate `credentials.json` using the existing integration's [documented export workflow](https://github.com/bart-gander/aquaservice-api/tree/v0.1.0#export-credentials-from-the-website). Never put a broker password in this config or on the command line; use `password_env`.
+Populate `credentials.json` using the existing integration's [documented export workflow](https://github.com/bart-gander/aquaservice-api/tree/v0.1.1#export-credentials-from-the-website). Never put a broker password in this config or on the command line; use `password_env`.
 
 ## Configure and check
 
@@ -159,10 +160,10 @@ podman run -d --name aquaservice2mqtt \
 ```
 
 Omit the password secret and username when MQTT authentication is not used. Secret
-file permissions must be `0400` or `0600`, readable by the image user; group/world
-readable credentials are intentionally rejected by the API library. Bind mounts
-are also supported, but preserve suitable ownership and permissions rather than
-making credentials world-readable. With a remote container engine, bind-mount
+files must be readable by the image user and must not be group/world-writable.
+Prefer `0400`/`0600` for standalone files; managed read-sharing modes such as
+`0440`, `0444`, `0640`, and `0644` are also supported. Bind mounts
+are supported as well. With a remote container engine, bind-mount
 paths refer to the engine host, not the client machine. Use a read-only mount and
 `AQUASERVICE2MQTT_CONFIG=/config/config.toml` if TOML is preferred, and mount any
 custom CA file read-only as well.
@@ -175,6 +176,23 @@ The exec-form entrypoint receives SIGTERM directly. Shutdown may wait for an
 in-flight synchronous API call/retries; configure the orchestrator's stop grace
 period accordingly. No API-polling healthcheck is added, avoiding extra account
 requests.
+
+### Kubernetes Secrets and rotation
+
+With `aquaservice-api v0.1.1`, mount the Secret directory directly, read-only, and
+set `AQUASERVICE2MQTT_CREDENTIALS_PATH` to its stable `credentials.json` path.
+The default Kubernetes Secret mode `0644` is accepted; `0440` with an appropriate
+pod `fsGroup` also works when the process has group read access. Keep the image's
+user identity; no init-container copy, chmod, or chown is required. Restrict which
+workloads can mount the Secret, and keep ordinary local credential files private.
+
+The bridge preserves symlinks in config, environment, and CLI credential paths.
+It reopens the mounted path on every API poll, so an atomic `..data` Secret
+rotation is picked up on the next poll after Kubernetes updates the volume.
+Do not use `subPath` for a rotating Secret, and do not configure a resolved
+timestamped target. This is credential-file rotation, not automatic token renewal.
+MQTT passwords supplied through environment variables still require a pod restart
+when the environment Secret changes. CA/config changes are not hot-reloaded.
 
 ## MQTT and Home Assistant behavior
 

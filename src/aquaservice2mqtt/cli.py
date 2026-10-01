@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_config(args.config)
         if args.credentials:
             settings = replace(
-                settings, credentials_path=args.credentials.expanduser().resolve()
+                settings, credentials_path=args.credentials.expanduser().absolute()
             )
         if args.command == "check":
             value = NextDeliveryAdapter(settings.credentials_path).fetch()

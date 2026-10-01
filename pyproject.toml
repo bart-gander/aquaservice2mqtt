@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aquaservice2mqtt"
-version = "0.1.0"
+version = "0.1.1"
 description = "Read-only Aquaservice next-delivery MQTT bridge"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 dependencies = [
     "paho-mqtt>=2,<3",
-    "aquaservice-api @ git+https://github.com/bart-gander/aquaservice-api.git@v0.1.0",
+    "aquaservice-api @ git+https://github.com/bart-gander/aquaservice-api.git@v0.1.1",
 ]
 
 [tool.hatch.metadata]
