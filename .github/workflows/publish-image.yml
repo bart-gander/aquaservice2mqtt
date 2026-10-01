@@ -1,0 +1,155 @@
+name: Publish container image
+
+on:
+  push:
+    branches: [develop]
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+# Serialize updates to the same tag without interrupting an active publication.
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set image name
+        shell: bash
+        run: printf 'IMAGE=ghcr.io/%s\n' "${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push candidate by digest
+        id: build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: Containerfile
+          target: runtime
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=max
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+
+      - name: Smoke-test the native candidate
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges "$IMAGE@$DIGEST" --help
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --entrypoint python "$IMAGE@$DIGEST" \
+            -c 'import aquaservice, os, ssl; assert os.getuid() != 0; assert ssl.create_default_context().get_ca_certs()'
+
+      - name: Record verified digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/digests/$ARCH.txt"
+
+      - name: Upload verified digest
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.arch }}.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish multi-architecture tag
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Set image name and tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/heads/develop ]]; then
+            tag=develop
+          elif [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" =~ ^v[0-9][A-Za-z0-9_.-]*$ && ${#GITHUB_REF_NAME} -le 128 ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            printf 'Unsupported publication ref: %s\n' "$GITHUB_REF" >&2
+            exit 1
+          fi
+          printf 'IMAGE=ghcr.io/%s\nTAG=%s\n' "${GITHUB_REPOSITORY,,}" "$tag" >> "$GITHUB_ENV"
+
+      - name: Download verified digests
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish exact build outputs under one tag
+        shell: bash
+        run: |
+          refs=()
+          for arch in amd64 arm64; do
+            read -r digest < "$RUNNER_TEMP/digests/$arch.txt"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+            refs+=("$IMAGE@$digest")
+          done
+          docker buildx imagetools create --tag "$IMAGE:$TAG" "${refs[@]}"
+
+      - name: Verify published platforms
+        shell: bash
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$TAG" --raw \
+            | jq -e '[.manifests[]
+              | select(.annotations["vnd.docker.reference.type"] != "attestation-manifest")
+              | (.platform.os + "/" + .platform.architecture)]
+              | sort == ["linux/amd64", "linux/arm64"]'
+          printf 'Published %s:%s for linux/amd64 and linux/arm64.\n' \
+            "$IMAGE" "$TAG" >> "$GITHUB_STEP_SUMMARY"

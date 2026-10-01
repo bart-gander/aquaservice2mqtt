@@ -70,6 +70,41 @@ Optional build arguments are `PYTHON_IMAGE` (default
 3.11+; choose compatible images for the target architecture. Runtime account and
 broker settings are **not** build arguments and must never be baked into layers.
 
+### Published multi-architecture images
+
+The `Publish container image` GitHub Actions workflow builds **linux/amd64** and
+**linux/arm64** on separate native GitHub-hosted runners, then publishes a single
+multi-architecture tag to `ghcr.io/bart-gander/aquaservice2mqtt`:
+
+| Git push | Image tag |
+|---|---|
+| Branch `develop` | `ghcr.io/bart-gander/aquaservice2mqtt:develop` |
+| Version tag such as `v0.1.0` | `ghcr.io/bart-gander/aquaservice2mqtt:v0.1.0` |
+
+Pushes to `main`, other branches, and pull requests do not publish images. Version
+tags match `v[0-9]*` and must also be valid Docker tags; the leading `v` is retained.
+No `latest` tag is updated. The tagged commit or `develop` branch must contain the
+workflow file for it to run.
+
+Each architecture builds the `runtime` target from the existing `Containerfile`
+and pushes an untagged candidate by digest. The workflow smoke-tests that exact
+candidate (CLI startup, installed API dependency, non-root identity, and CA trust)
+before exporting its digest. Only after **both** architectures succeed does the
+publish job combine their exact digests, set the public-facing image tag, and
+verify that its runnable platforms are exactly AMD64 and ARM64. Build provenance
+is retained, and architecture-specific GitHub Actions caches speed up rebuilds.
+
+Authentication uses the repository's automatic `GITHUB_TOKEN` with
+`contents: read` and `packages: write`; no personal token or Aquaservice credentials
+are required. GHCR package visibility controls anonymous pulls: set the package
+to public if anonymous access is wanted. Concurrent publications of the same Git
+ref are serialized. Failed builds cannot move the final image tag, though their
+untagged candidates may remain in GHCR.
+
+After a successful publication, use either image reference above in place of
+`localhost/aquaservice2mqtt:0.1.0` in the runtime examples. Docker/Podman selects
+the appropriate architecture automatically.
+
 ### Runtime configuration
 
 Every bridge setting can be set through environment variables, with or without
