@@ -38,7 +38,7 @@ pollinterval = 60
     assert result["state"] == {
         "topic": "house/bridges/safe-instance/next_delivery/state",
         "payload": "2027-04-02",
-        "retain": False,
+        "retain": True,
         "qos": 1,
     }
     assert result["discovery"]["payload"]["device_class"] == "date"

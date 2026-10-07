@@ -65,7 +65,7 @@ def test_publish_failure_retries_on_live_transport(settings, caplog, phase, fail
     bridge.tick(now=now + PUBLISH_RETRY_SECONDS)
     assert not bridge.needs_publish
     bridge.client.publish.assert_any_call(
-        bridge.topics.state, "2027-01-02", qos=1, retain=False
+        bridge.topics.state, "2027-01-02", qos=1, retain=True
     )
     bridge.client.publish.assert_any_call(
         bridge.topics.availability, "online", qos=1, retain=True

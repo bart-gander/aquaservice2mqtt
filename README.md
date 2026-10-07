@@ -226,12 +226,12 @@ For `topicprefix = "aquaservice2mqtt"` and `instanceid = "aquaservice"`:
 | Purpose | Topic | Retained |
 | --- | --- | --- |
 | Discovery | `homeassistant/sensor/aquaservice/next_delivery/config` | yes |
-| State | `aquaservice2mqtt/aquaservice/next_delivery/state` | **no** |
+| State | `aquaservice2mqtt/aquaservice/next_delivery/state` | yes |
 | Availability | `aquaservice2mqtt/aquaservice/next_delivery/availability` | yes |
 
 All bridge publishes use QoS 1 and wait for PUBACK outside Paho network callbacks. Discovery identifies a Home Assistant MQTT sensor with `device_class: date` and `expire_after: pollinterval * 2`. State is the validated `YYYY-MM-DD` date, or `None` when the existing integration explicitly reports no delivery date; Home Assistant interprets `None` as unknown.
 
-The bridge clears any retained state from an older release before publishing a non-retained state. Discovery and availability are retained; an MQTT Last Will sets availability `offline` for an unexpected connection loss. It only announces `online` after a validated API result. On connection/reconnection it resubscribes to `homeassistant/status`, reannounces retained discovery, and replays cached fresh state after a Home Assistant `online` birth message without making an extra API request.
+Discovery, state, and availability are retained, so Home Assistant receives the latest delivery date even when it subscribes after publication. The bridge does not clear retained state on reconnection. An MQTT Last Will sets availability `offline` for an unexpected connection loss. It only announces `online` after a validated API result; API failures or stale cache publish `offline` without replacing the retained date. Home Assistant still uses `expire_after` to expire missing updates. On connection/reconnection it resubscribes to `homeassistant/status`, reannounces retained discovery, and replays cached fresh state after a Home Assistant `online` birth message without making an extra API request.
 
 ## Verification
 
@@ -243,4 +243,4 @@ uv lock --check
 uv build
 ```
 
-The test suite uses synthetic credentials/data only. The MQTT smoke test starts and stops a temporary loopback-only `amqtt` broker; it verifies discovery, non-retained state, availability, HA birth replay without a refetch, API-error offline handling, and broker reconnection. Regression tests cover PUBACK timeouts and publish rejection during connection, polling, and birth replay; bounded retry timing; safe diagnostics; cache expiration; topic normalization; and TLS CA errors. No real Aquaservice request or external MQTT broker is contacted by tests. Flake8's E501 line-length rule is intentionally disabled; other checks remain enabled.
+The test suite uses synthetic credentials/data only. The MQTT smoke test starts and stops a temporary loopback-only `amqtt` broker; it verifies discovery, retained state delivered to a late subscriber, availability, HA birth replay without a refetch, API-error offline handling, and broker reconnection. Regression tests cover PUBACK timeouts and publish rejection during connection, polling, and birth replay; bounded retry timing; safe diagnostics; cache expiration; topic normalization; and TLS CA errors. No real Aquaservice request or external MQTT broker is contacted by tests. Flake8's E501 line-length rule is intentionally disabled; other checks remain enabled.

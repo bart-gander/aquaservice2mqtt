@@ -128,6 +128,26 @@ def test_loopback_broker_discovery_state_birth_reconnect_and_error(tmp_path, cap
             bridge,
         )
         assert outcome["calls"] == 1
+        # A subscriber arriving after publication must receive the retained date.
+        late_messages = []
+        late = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        late.on_connect = lambda client, *args: client.subscribe(bridge.topics.state, qos=1)
+
+        def on_late_message(client, userdata, message):
+            if message.topic == bridge.topics.state:
+                late_messages.append((message.payload.decode(), message.retain))
+
+        late.on_message = on_late_message
+        try:
+            late.connect("127.0.0.1", port)
+            late.loop_start()
+            wait_for(lambda: bool(late_messages), bridge)
+            assert late_messages
+            assert all(message == ("2027-04-02", True) for message in late_messages)
+            assert outcome["calls"] == 1
+        finally:
+            late.disconnect()
+            late.loop_stop()
         publisher = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id="test-birth",

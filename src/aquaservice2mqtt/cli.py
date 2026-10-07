@@ -51,7 +51,7 @@ def _planned(settings: Settings, value: str | None) -> dict[str, object]:
             "topic": topics.state,
             "payload": value or "None",
             "qos": 1,
-            "retain": False,
+            "retain": True,
         },
         "availability": {
             "topic": topics.availability,

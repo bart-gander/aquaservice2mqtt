@@ -1,4 +1,4 @@
-"""MQTT lifecycle with safe retained discovery and non-retained state."""
+"""MQTT lifecycle with retained discovery, state, and availability."""
 
 from __future__ import annotations
 
@@ -76,8 +76,6 @@ class MqttBridge:
         self.cached_at = self.next_poll = 0.0
         self.needs_publish = False
         self.next_publish = 0.0
-
-        self.clear_retained_state = True
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):  # type: ignore[no-untyped-def]
         if reason_code == 0:
@@ -169,16 +167,12 @@ class MqttBridge:
             self.cache_is_currently_valid
             and now - self.cached_at <= self.settings.interval * 2
         ):
-            self._publish(self.topics.state, self.cached_state or "None", retain=False)
+            self._publish(self.topics.state, self.cached_state or "None", retain=True)
             self._publish(self.topics.availability, "online", retain=True)
         else:
             self._publish(self.topics.availability, "offline", retain=True)
 
     def _publish_snapshot(self, now: float) -> None:
-        if self.clear_retained_state:
-            # Erase state retained by any old bridge release on each connection.
-            self._publish(self.topics.state, "", retain=True)
-            self.clear_retained_state = False
         self._publish_discovery()
         self._publish_cached_state(now)
         logger.info("MQTT snapshot acknowledged.")
@@ -192,7 +186,6 @@ class MqttBridge:
             if event == "connected":
                 self.connected = True
                 logger.info("MQTT connected.")
-                self.clear_retained_state = True
                 self.needs_publish = True
                 self.next_publish = 0.0
             elif event == "disconnected":
